@@ -1,52 +1,55 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h> 
-#include <ModbusMaster.h>         // Modbus master library for ESP8266
-
-#include "globals.h"
-#include "settings.h"
-#include "growattInterface.h"
+#include <ModbusMaster.h>
+#include <SoftwareSerial.h>
 
 
-/////////////////////////////////////////////////////////////////////////// Funktionsprototypen
-void ReadInputRegisters();
+ModbusMaster node;
+SoftwareSerial RS485Serial(D1, D2); // RX, TX
 
+void preTransmission() {
+  digitalWrite(D0, 1);
+}
 
+void postTransmission() {
+  digitalWrite(D0, 0);
+}
 
-void ReadInputRegisters() {
-  char json[1024];
-  char topic[80];
+void setup() {
+  pinMode(D0, OUTPUT);
+  digitalWrite(D0, 0);
 
-  uint8_t result;
+  Serial.begin(9600);
+  RS485Serial.begin(9600);
 
-  digitalWrite(STATUS_LED, 0);
+  node.begin(1, RS485Serial);
+  node.preTransmission(preTransmission);
+  node.postTransmission(postTransmission);
 
-  result = growattInterface.ReadInputRegisters(json);
-  if (result == growattInterface.Success) {
-    leds[0] = CRGB::Green;
-    FastLED.show();
-    lastRGB = millis();
-    ledoff = true;
+}
 
-#ifdef DEBUG_SERIAL
-    Serial.println(result);
-#endif
-    sprintf(topic, "%s/data", topicRoot);
-    mqtt.publish(topic, json);
-    Serial.println("Data MQTT sent");
+void loop() {
+  uint8_t j, result;
+  uint16_t data[10];
 
-  } else if (result != growattInterface.Continue) {
-    leds[0] = CRGB::Red;
-    FastLED.show();
-    lastRGB = millis();
-    ledoff = true;
-
-    Serial.print(F("Error: "));
-    String message = growattInterface.sendModbusError(result);
-    Serial.println(message);
-    char topic[80];
-    sprintf(topic, "%s/error", topicRoot);
-    mqtt.publish(topic, message.c_str());
-    delay(5);
+  result = node.readHoldingRegisters(0,20);
+  if (result == node.ku8MBSuccess)
+  {
+    Serial.println("Coils 1: ");
+    for (int i = 0; i < 40; i++){
+      
+      Serial.println(node.getResponseBuffer(i));
+      delay(1000);
+    }
+  
+    // for (j = 0; j < 10; j++)
+    // {
+    //   data[j] = node.getResponseBuffer(j);
+    //   Serial.println(data[j]);
+    // }
   }
-  digitalWrite(STATUS_LED, 1);
+  else {
+  Serial.print("Error getting data\n");
+  }
+
+  delay(1000);
 }
